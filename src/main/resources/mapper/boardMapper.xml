@@ -61,8 +61,12 @@
         )
     </insert>
 
-    <select id="findFile" resultType="attachedFile">
+    <select id="findFileByBoardId" resultType="file">
         select * from attached_file where board_id = #{board_id}
+    </select>
+
+    <select id="findFileByAttachedFileId" resultType="file">
+        select * from attached_file where attachedFile_id = #{attachedFile_id}
     </select>
 
 </mapper>

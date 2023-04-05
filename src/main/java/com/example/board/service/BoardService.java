@@ -32,7 +32,11 @@ public class BoardService {
         return boardMapper.findBoard(board_id);
     }
 
-    public AttachedFile findFile(long attachedFile_id) {
-        return boardMapper.findFile(attachedFile_id);
+    public AttachedFile findFileByBoardId(Long board_id) {
+        return boardMapper.findFileByBoardId(board_id);
+    }
+
+    public AttachedFile findFileByAttachedFileId(Long attachedFile_id) {
+        return boardMapper.findFileByAttachedFileId(attachedFile_id);
     }
 }

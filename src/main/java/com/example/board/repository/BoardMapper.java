@@ -14,5 +14,6 @@ public interface BoardMapper {
     void updateBoard(Board updateBoard);
     void removeBoard(Long board_id);
     void saveFile(AttachedFile attachedFile);
-    AttachedFile findFile(Long board_id);
+    AttachedFile findFileByBoardId(Long board_id);
+    AttachedFile findFileByAttachedFileId(Long attachedFile_id);
 }
