@@ -8,6 +8,7 @@ import com.example.board.model.member.Member;
 import com.example.board.repository.BoardMapper;
 import com.example.board.service.BoardService;
 import com.example.board.util.FileService;
+import com.example.board.util.PageNavigator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,8 +34,11 @@ import java.util.List;
 @Controller
 public class BoardController {
 
-    private final BoardMapper boardMapper;
     private final BoardService boardService;
+
+    // 게시판 관련 상수 값
+    final int countPerPage = 10;    // 페이지 당 글 수
+    final int pagePerGroup = 5;     // 페이지 이동 그룹 당 표시할 페이지 수
 
     @Value("${file.upload.path}")
     private String uploadPath;
@@ -69,6 +73,7 @@ public class BoardController {
         Board board = BoardWriteForm.toBoard(boardWriteForm);
         // board 객체에 로그인한 사용자의 아이디를 추가한다.
         board.setMember_id(loginMember.getMember_id());
+        // board 객체를 저장한다.
         boardService.saveBoard(board, file);
 
         // board/list 로 리다이렉트한다.
@@ -77,11 +82,23 @@ public class BoardController {
 
     // 게시글 전체 보기
     @GetMapping("list")
-    public String list(Model model) {
+    public String list(@RequestParam(value = "page", defaultValue = "1") int page,
+                       @RequestParam(value = "searchText", defaultValue = "") String searchText,
+                       Model model) {
+        log.info("searchText: {}", searchText);
+        int total = boardService.getTotal(searchText);
+
+        PageNavigator navi = new PageNavigator(countPerPage, pagePerGroup, page, total);
+
         // 데이터베이스에 저장된 모든 Board 객체를 리스트 형태로 받는다.
-        List<Board> boards = boardMapper.findAllBoards();
+        List<Board> boards = boardService.findBoards(searchText, navi.getStartRecord(), navi.getCountPerPage());
+
         // Board 리스트를 model 에 저장한다.
         model.addAttribute("boards", boards);
+        // PageNavigation 객체를 model 에 저장한다.
+        model.addAttribute("navi", navi);
+        model.addAttribute("searchText", searchText);
+
         // board/list.html 를 찾아서 리턴한다.
         return "board/list";
     }
@@ -93,23 +110,19 @@ public class BoardController {
         log.info("id: {}", board_id);
 
         // board_id 에 해당하는 게시글을 데이터베이스에서 찾는다.
-        Board board = boardService.findBoard(board_id);
+        Board board = boardService.readBoard(board_id);
         // board_id에 해당하는 게시글이 없으면 리스트로 리다이렉트 시킨다.
         if (board == null) {
             log.info("게시글 없음");
             return "redirect:/board/list";
         }
 
-        // 조회수 1 증가
-        board.addHit();
-        // 조회수를 증가하여 데이터베이스에 업데이트 한다.
-        boardMapper.updateBoard(board);
-
         // 모델에 Board 객체를 저장한다.
         model.addAttribute("board", board);
 
-        AttachedFile file = boardService.findFileByBoardId(board_id);
-        model.addAttribute("file", file);
+        // 첨부파일을 찾는다.
+        AttachedFile attachedFile = boardService.findFileByBoardId(board_id);
+        model.addAttribute("file", attachedFile);
 
         // board/read.html 를 찾아서 리턴한다.
         return "board/read";
@@ -123,13 +136,18 @@ public class BoardController {
         log.info("id: {}", board_id);
 
         // board_id에 해당하는 게시글이 없거나 게시글의 작성자가 로그인한 사용자의 아이디와 다르면 수정하지 않고 리스트로 리다이렉트 시킨다.
-        Board board = boardMapper.findBoard(board_id);
+        Board board = boardService.findBoard(board_id);
         if (board_id == null || !board.getMember_id().equals(loginMember.getMember_id())) {
             log.info("수정 권한 없음");
             return "redirect:/board/list";
         }
         // model 에 board 객체를 저장한다.
-        model.addAttribute("board", board);
+        model.addAttribute("board", Board.toBoardUpdateForm(board));
+
+        // 첨부파일을 찾는다.
+        AttachedFile attachedFile = boardService.findFileByBoardId(board_id);
+        model.addAttribute("file", attachedFile);
+
         // board/update.html 를 찾아서 리턴한다.
         return "board/update";
     }
@@ -139,15 +157,17 @@ public class BoardController {
     public String update(@SessionAttribute(value = "loginMember", required = false) Member loginMember,
                          @RequestParam Long board_id,
                          @Validated @ModelAttribute("board") BoardUpdateForm updateBoard,
-                         BindingResult result) {
+                         BindingResult result,
+                         @RequestParam(required = false) MultipartFile file) {
         log.info("board: {}", updateBoard);
+        log.info("file: {}, {}", file.getOriginalFilename(), file.getSize());
         // validation 에 에러가 있으면 board/update.html 페이지로 돌아간다.
         if (result.hasErrors()) {
             return "board/update";
         }
 
         // board_id 에 해당하는 Board 정보를 데이터베이스에서 가져온다.
-        Board board = boardMapper.findBoard(board_id);
+        Board board = boardService.findBoard(board_id);
         // Board 객체가 없거나 작성자가 로그인한 사용자의 아이디와 다르면 수정하지 않고 리스트로 리다이렉트 시킨다.
         if (board == null || !board.getMember_id().equals(loginMember.getMember_id())) {
             log.info("수정 권한 없음");
@@ -158,7 +178,7 @@ public class BoardController {
         // 내용을 수정한다.
         board.setContents(updateBoard.getContents());
         // 수정한 Board 를 데이터베이스에 update 한다.
-        boardMapper.updateBoard(board);
+        boardService.updateBoard(board, updateBoard.isFileRemoved(), file);
         // 수정이 완료되면 리스트로 리다이렉트 시킨다.
         return "redirect:/board/list";
     }
@@ -168,14 +188,14 @@ public class BoardController {
     public String remove(@SessionAttribute(value = "loginMember", required = false) Member loginMember,
                          @RequestParam Long board_id) {
         // board_id 에 해당하는 게시글을 가져온다.
-        Board board = boardMapper.findBoard(board_id);
+        Board board = boardService.findBoard(board_id);
         // 게시글이 존재하지 않거나 작성자와 로그인 사용자의 아이디가 다르면 리스트로 리다이렉트 한다.
         if (board == null || !board.getMember_id().equals(loginMember.getMember_id())) {
             log.info("삭제 권한 없음");
             return "redirect:/board/list";
         }
         // 게시글을 삭제한다.
-        boardMapper.removeBoard(board_id);
+        boardService.removeBoard(board_id);
         // board/list 로 리다이렉트 한다.
         return "redirect:/board/list";
     }

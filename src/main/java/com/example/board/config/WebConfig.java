@@ -42,13 +42,13 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         // 인터셉터를 등록한다.
-        registry.addInterceptor(new LogInceptor())
-                // 인터셉터의 호출 순서를 지정. 낮을수록 먼저 호출된다.
-                .order(1)
-                // 인터셉터를 적용할 URL 패턴을 지정
-                .addPathPatterns("/**")
-                // 인터셉터에서 제외할 패턴을 지정
-                .excludePathPatterns("/css/**", "/*.ico", "/error");
+//        registry.addInterceptor(new LogInceptor())
+//                // 인터셉터의 호출 순서를 지정. 낮을수록 먼저 호출된다.
+//                .order(1)
+//                // 인터셉터를 적용할 URL 패턴을 지정
+//                .addPathPatterns("/**")
+//                // 인터셉터에서 제외할 패턴을 지정
+//                .excludePathPatterns("/css/**", "/*.ico", "/error");
 
         registry.addInterceptor(new LoginCheckInterceptor())
                 .order(2)
